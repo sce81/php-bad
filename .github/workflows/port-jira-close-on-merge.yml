@@ -1,0 +1,113 @@
+name: Port — close Jira on PR merge
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify-port:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Jira issue key
+        id: jira
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          KEY=""
+          if [[ "$HEAD_REF" =~ ([A-Z][A-Z0-9]+-[0-9]+) ]]; then
+            KEY="${BASH_REMATCH[1]}"
+          elif [[ "$PR_TITLE" =~ ([A-Z][A-Z0-9]+-[0-9]+) ]]; then
+            KEY="${BASH_REMATCH[1]}"
+          elif [[ "$PR_BODY" =~ ([A-Z][A-Z0-9]+-[0-9]+) ]]; then
+            KEY="${BASH_REMATCH[1]}"
+          fi
+
+          if [ -z "$KEY" ]; then
+            echo "No Jira issue key found in branch, title, or body — skipping Port callback."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "jira_issue_key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Resolved Jira key: $KEY"
+
+      - name: Authenticate to Port
+        if: steps.jira.outputs.skip != 'true'
+        id: port_auth
+        env:
+          PORT_CLIENT_ID: ${{ secrets.PORT_CLIENT_ID }}
+          PORT_CLIENT_SECRET: ${{ secrets.PORT_CLIENT_SECRET }}
+          PORT_API_URL: ${{ vars.PORT_API_URL || 'https://api.port.io' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PORT_CLIENT_ID:-}" ] || [ -z "${PORT_CLIENT_SECRET:-}" ]; then
+            echo "::error::Missing PORT_CLIENT_ID or PORT_CLIENT_SECRET repository secrets"
+            exit 1
+          fi
+          TOKEN=$(curl -sS -X POST "${PORT_API_URL}/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\":\"${PORT_CLIENT_ID}\",\"clientSecret\":\"${PORT_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Failed to obtain Port access token"
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "api_url=$PORT_API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Port workflow jira_close_on_pr_merged
+        if: steps.jira.outputs.skip != 'true'
+        env:
+          PORT_TOKEN: ${{ steps.port_auth.outputs.token }}
+          PORT_API_URL: ${{ steps.port_auth.outputs.api_url }}
+          JIRA_KEY: ${{ steps.jira.outputs.jira_issue_key }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -n \
+            --arg jira_issue_key "$JIRA_KEY" \
+            --arg repository "${{ github.repository }}" \
+            --arg pr_number "${{ github.event.pull_request.number }}" \
+            --arg pr_url "${{ github.event.pull_request.html_url }}" \
+            --arg pr_title "${{ github.event.pull_request.title }}" \
+            --arg branch "${{ github.event.pull_request.head.ref }}" \
+            --arg merge_sha "${{ github.event.pull_request.merge_commit_sha }}" \
+            --arg merged_by "${{ github.event.pull_request.merged_by.login || github.actor }}" \
+            --arg merge_status "merged" \
+            '{
+              inputs: {
+                jira_issue_key: $jira_issue_key,
+                repository: $repository,
+                pr_number: $pr_number,
+                pr_url: $pr_url,
+                pr_title: $pr_title,
+                branch: $branch,
+                merge_sha: $merge_sha,
+                merged_by: $merged_by,
+                merge_status: $merge_status
+              }
+            }')
+
+          echo "Calling Port workflow jira_close_on_pr_merged for $JIRA_KEY"
+          HTTP_CODE=$(curl -sS -o /tmp/port-response.json -w "%{http_code}" \
+            -X POST "${PORT_API_URL}/v1/workflows/jira_close_on_pr_merged/runs?trigger_node=trigger" \
+            -H "Authorization: Bearer ${PORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "Port response HTTP $HTTP_CODE"
+          cat /tmp/port-response.json
+          echo
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Port workflow trigger failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
