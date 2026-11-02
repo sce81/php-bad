@@ -1,0 +1,8 @@
+{
+  "name": "php-bad",
+  "private": true,
+  "description": "Intentionally vulnerable demo for Port / Aikido / Cursor triage workflows",
+  "dependencies": {
+    "test-package": "1.0.1"
+  }
+}
