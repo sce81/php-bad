@@ -1,0 +1,15 @@
+---
+description: Cut security/Jira remediation branches from develop
+alwaysApply: true
+---
+
+# Remediation branch base
+
+This repo's default branch is `develop`. PRs target `develop`.
+
+When creating autofix or security remediation work:
+
+- Cut branches from `develop` (or the repo default branch), never from `main` unless `main` is the default.
+- Name Jira autofix branches `bugfix/<JIRA-KEY>` (e.g. `bugfix/SD-21`).
+- Before opening a PR, rebase or merge `origin/develop` so `composer.json` / `composer.lock` (and other shared files) include prior dependency bumps.
+- Prefer updating existing open `bugfix/<JIRA-KEY>` PRs over opening duplicate Cursor/`cursor/bc-*` PRs for the same issue.
