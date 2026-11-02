@@ -3,7 +3,7 @@
   "description": "Intentionally vulnerable PHP demo for security triage demos",
   "type": "project",
   "require": {
-    "php": ">=7.4",
+    "php": ">=8.1.28",
     "guzzlehttp/psr7": "1.9.1",
     "monolog/monolog": "2.9.3"
   },
