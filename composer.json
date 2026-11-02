@@ -5,7 +5,8 @@
   "require": {
     "php": "^8.1.28",
     "guzzlehttp/psr7": "1.9.1",
-    "monolog/monolog": "2.9.3"
+    "monolog/monolog": "2.9.3",
+    "twig/twig": "2.14.12"
   },
   "license": "MIT"
 }
