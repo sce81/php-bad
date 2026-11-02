@@ -3,6 +3,8 @@ name: Port — close Jira on PR merge
 on:
   pull_request:
     types: [closed]
+    branches:
+      - develop
 
 permissions:
   contents: read
@@ -10,7 +12,7 @@ permissions:
 
 jobs:
   notify-port:
-    if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'develop'
     runs-on: ubuntu-latest
     steps:
       - name: Extract Jira issue key
