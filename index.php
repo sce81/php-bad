@@ -1,6 +1,6 @@
 <?php
 /**
- * Demo PHP app intentionally using an outdated guzzlehttp/psr7 (CVE-2023-29197).
+ * Demo PHP app using guzzlehttp/psr7 1.9.1 (CVE-2023-29197 remediated).
  * Used for Port + Aikido + Cursor triage demonstrations.
  */
 require __DIR__ . '/vendor/autoload.php';
